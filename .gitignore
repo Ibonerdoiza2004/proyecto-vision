@@ -1,0 +1,9 @@
+__pycache__/
+cifar10/train/
+cifar10/test/bird/
+cifar10/test/cat/
+cifar10/test/deer/
+cifar10/test/dog/
+cifar10/test/frog/
+cifar10/test/horse/
+models/
