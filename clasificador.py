@@ -147,7 +147,7 @@ def load_class_names(labels_file):
 # Función principal
 def main():
     USE_AUGMENTATION = True
-    ML_MODEL = 'random_forest'  # Opciones: 'svm' o 'random_forest'
+    ML_MODEL = 'svm'  # Opciones: 'svm' o 'random_forest'
     
     print(f"Clasificador CIFAR-4 con {ML_MODEL.upper()}")
     print(f"Data Augmentation: {'ACTIVADO' if USE_AUGMENTATION else 'DESACTIVADO'}")
