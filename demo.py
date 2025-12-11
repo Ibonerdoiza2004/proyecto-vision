@@ -3,8 +3,9 @@ import numpy as np
 import pickle
 import os
 import random
-
-from clasificador import extract_features
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, accuracy_score
+from clasificador import extract_features, load_images_from_folder
 
 # Carga el modelo entrenado
 def load_model(model_type='svm'):
@@ -20,25 +21,86 @@ def load_model(model_type='svm'):
         class_names = pickle.load(f)
     return model, scaler, class_names
 
+# Evalúa el modelo y crea una confusion matrix
+def evaluate_test_set(model, model_type, scaler, class_names):
+    test_path = "./cifar10/test"
+    print("Evaluando el modelo")
+    
+    y_true = []
+    y_pred = []
+    
+    for idx, class_name in enumerate(class_names):
+        class_path = os.path.join(test_path, class_name)
+        images, labels = load_images_from_folder(class_path, idx)
+        
+        if not images:
+            continue
+            
+        print(f"  Prediciendo '{class_name}' ({len(images)} imágenes)")
+
+        # Extraer características
+        features_list = [extract_features(img) for img in images]
+        
+        # Convertir a numpy, normalizar y predecir
+        X_batch = np.array(features_list, dtype=np.float32)
+        X_batch = scaler.transform(X_batch)
+        preds = model.predict(X_batch)
+        
+        y_true.extend(labels)
+        y_pred.extend(preds)
+
+    # Calcular métricas
+    acc = accuracy_score(y_true, y_pred)
+    cm = confusion_matrix(y_true, y_pred)
+    
+    print(f"Precisión del modelo: {acc * 100:.2f}%")
+
+    # Grafico
+    plt.figure(figsize=(10, 8))
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.colorbar()
+    ticks = np.arange(len(class_names))
+    plt.xticks(ticks, class_names, rotation=45, ha='right')
+    plt.yticks(ticks, class_names)
+    
+    # Agregar números en cada celda
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(j, i, format(cm[i, j], 'd'),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black",
+                    fontsize=10)
+    
+    plt.xlabel('Predicción')
+    plt.ylabel('Etiqueta verdadera')
+    plt.title(f'Matriz de Confusión (Precisión: {acc*100:.1f}%)')
+    plt.tight_layout()
+    os.makedirs(f'models/{model_type}', exist_ok=True)
+    out_file = os.path.join(f'models/{model_type}', 'confusion_matrix.png')
+    plt.savefig(out_file)
+    plt.show()
+    plt.close('all')
+
 # Visualiza las características extraídas de una imagen
 def visualize_features(img, true_label, predicted_label, confidence):
-    img_size = 200
-    spacing = 20
+    img_size = 500
+    spacing = 40
     canvas_width = img_size * 2 + spacing * 3
-    canvas_height = img_size * 2 + spacing * 4 + 100
+    canvas_height = img_size * 2 + spacing * 4 + 200
     canvas = np.ones((canvas_height, canvas_width, 3), dtype=np.uint8) * 255
     
     # Imagen original y etiquetas
     img_display = cv.resize(img, (img_size, img_size), interpolation=cv.INTER_NEAREST)
     canvas[spacing:spacing+img_size, spacing:spacing+img_size] = img_display
     
-    y_text = spacing + img_size + 20
+    y_text = spacing + img_size + 40
     cv.putText(canvas, f"Real: {true_label}", (spacing, y_text), 
-               cv.FONT_HERSHEY_SIMPLEX, 0.45, (0, 150, 0), 1)
-    cv.putText(canvas, f"Pred: {predicted_label}", (spacing, y_text+20), 
-               cv.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
-    cv.putText(canvas, f"Conf: {confidence:.1f}%", (spacing, y_text+40), 
-               cv.FONT_HERSHEY_SIMPLEX, 0.45, (255, 0, 0), 1)
+               cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 150, 0), 2)
+    cv.putText(canvas, f"Pred: {predicted_label}", (spacing, y_text+40), 
+               cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+    cv.putText(canvas, f"Conf: {confidence:.1f}%", (spacing, y_text+80), 
+               cv.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
     
     # Visualizacion HOG con gradientes
     img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -52,8 +114,8 @@ def visualize_features(img, true_label, predicted_label, confidence):
     
     x_col2 = spacing * 2 + img_size
     canvas[spacing:spacing+img_size, x_col2:x_col2+img_size] = magnitude_display
-    cv.putText(canvas, "HOG", (x_col2, spacing+img_size+25), 
-               cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    cv.putText(canvas, "HOG", (x_col2, spacing+img_size+50), 
+               cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
     
     # Histograma de color HSV
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
@@ -76,14 +138,14 @@ def visualize_features(img, true_label, predicted_label, confidence):
     bin_w = img_size // bins
     for i in range(bins):
         x = i * bin_w
-        cv.line(hist_canvas, (x, img_size), (x, img_size - int(hist_h_vis[i][0])), (255, 0, 0), 2)
-        cv.line(hist_canvas, (x, img_size), (x, img_size - int(hist_s_vis[i][0])), (0, 255, 0), 1)
-        cv.line(hist_canvas, (x, img_size), (x, img_size - int(hist_v_vis[i][0])), (0, 0, 255), 1)
+        cv.line(hist_canvas, (x, img_size), (x, img_size - int(hist_h_vis[i][0])), (255, 0, 0), 4)
+        cv.line(hist_canvas, (x, img_size), (x, img_size - int(hist_s_vis[i][0])), (0, 255, 0), 3)
+        cv.line(hist_canvas, (x, img_size), (x, img_size - int(hist_v_vis[i][0])), (0, 0, 255), 3)
     
-    y_row2 = spacing * 3 + img_size + 60
+    y_row2 = spacing * 3 + img_size + 120
     canvas[y_row2:y_row2+img_size, x_col2:x_col2+img_size] = hist_canvas
-    cv.putText(canvas, "Histograma", (x_col2, y_row2+img_size+25), 
-               cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    cv.putText(canvas, "Histograma", (x_col2, y_row2+img_size+50), 
+               cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
     
     # Estadisticas de brillo y color
     stats_canvas = np.ones((img_size, img_size, 3), dtype=np.uint8) * 255
@@ -103,12 +165,12 @@ def visualize_features(img, true_label, predicted_label, confidence):
     ]
     
     for i, text in enumerate(stats_text):
-        cv.putText(stats_canvas, text, (10, 30 + i*25), 
-                   cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 1)
+        cv.putText(stats_canvas, text, (20, 60 + i*60), 
+                   cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
     
     canvas[y_row2:y_row2+img_size, spacing:spacing+img_size] = stats_canvas
-    cv.putText(canvas, "Estadisticas", (spacing, y_row2+img_size+25), 
-               cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    cv.putText(canvas, "Estadisticas", (spacing, y_row2+img_size+50), 
+               cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
     
     return canvas
 
@@ -117,7 +179,7 @@ def main():
     
     # Cargar modelo
     model, scaler, class_names = load_model(model_type=ML_MODEL)
-    
+    evaluate_test_set(model, ML_MODEL, scaler, class_names)
     test_path = "./cifar10/test"
     
     print(f"Demo visual del clasificador ({ML_MODEL.upper()})")
